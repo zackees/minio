@@ -1,0 +1,22 @@
+# Build MinIO from this repository's source. Upstream stopped publishing
+# images (Docker Hub / quay.io) and binaries (dl.min.io returns 410), and
+# every other Dockerfile here starts from one of those, so this is the only
+# self-contained way to get a server.
+#
+#   docker build -f Dockerfile.source -t minio-source .
+#   docker run -p 9000:9000 -p 9001:9001 -v minio-data:/data minio-source
+FROM golang:1.24-alpine AS build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=auto
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -trimpath -ldflags "-s -w" -o /out/minio .
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates curl
+COPY --from=build /out/minio /usr/bin/minio
+EXPOSE 9000 9001
+VOLUME ["/data"]
+ENTRYPOINT ["minio"]
+CMD ["server", "/data", "--console-address", ":9001"]
